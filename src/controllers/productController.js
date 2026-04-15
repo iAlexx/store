@@ -1,35 +1,44 @@
-const { Product, Store, sequelize } = require('../models');
-const { upsertDualPrices } = require('../middleware/priceSync');
+const productService = require('../services/productService');
 
 async function addProduct(req, res) {
-  const transaction = await sequelize.transaction();
   try {
-    const { storeId, name, stock = 0, isActive = true, usdPrice } = req.body;
+    const { storeId, name, stock = 0, isActive = true, description, imageUrl, sku, usdPrice, sypPrice } = req.body;
+
     if (!storeId || !name || usdPrice === undefined) {
-      await transaction.rollback();
       return res.status(400).json({ message: 'storeId, name and usdPrice are required' });
     }
 
-    const store = await Store.findByPk(storeId, { transaction });
-    if (!store) {
-      await transaction.rollback();
-      return res.status(404).json({ message: 'Store not found' });
-    }
-
-    const product = await Product.create({ storeId, name, stock, isActive }, { transaction });
-    const pricing = await upsertDualPrices({
-      productId: product.id,
+    const result = await productService.addProduct({
+      storeId,
+      name,
+      stock,
+      isActive,
+      description,
+      imageUrl,
+      sku,
       usdPrice,
-      exchangeRate: store.exchangeRate,
-      transaction,
+      sypPrice,
     });
 
-    await transaction.commit();
-    return res.status(201).json({ product, pricing });
+    return res.status(201).json(result);
   } catch (error) {
-    await transaction.rollback();
+    const code = error.message === 'Store not found' ? 404 : 500;
+    return res.status(code).json({ message: error.message });
+  }
+}
+
+async function listProducts(req, res) {
+  try {
+    const storeId = Number(req.params.storeId || req.query.storeId);
+    if (!storeId) {
+      return res.status(400).json({ message: 'storeId is required' });
+    }
+
+    const products = await productService.listStoreProducts(storeId);
+    return res.json(products);
+  } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 }
 
-module.exports = { addProduct };
+module.exports = { addProduct, listProducts };

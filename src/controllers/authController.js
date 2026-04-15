@@ -1,33 +1,33 @@
-const bcrypt = require('bcryptjs');
-const { Merchant } = require('../models');
+const authService = require('../services/authService');
 
 async function register(req, res) {
   try {
-    const { fullName, email, phone, password } = req.body;
+    const { fullName, email, phone, password, city } = req.body;
 
     if (!fullName || !email || !phone || !password) {
       return res.status(400).json({ message: 'fullName, email, phone, password are required' });
     }
 
-    const existing = await Merchant.findOne({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ message: 'Merchant already exists' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const merchant = await Merchant.create({ fullName, email, phone, passwordHash });
-
+    const result = await authService.registerMerchant({ fullName, email, phone, password, city });
     return res.status(201).json({
-      message: 'Merchant registered successfully',
+      message: 'Merchant registered and store auto-created',
+      token: result.token,
       merchant: {
-        id: merchant.id,
-        fullName: merchant.fullName,
-        email: merchant.email,
-        phone: merchant.phone,
+        id: result.merchant.id,
+        fullName: result.merchant.fullName,
+        email: result.merchant.email,
+        role: result.merchant.role,
+      },
+      store: {
+        id: result.store.id,
+        name: result.store.name,
+        slug: result.store.slug,
+        exchangeRate: result.store.exchangeRate,
       },
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    const code = error.message === 'Merchant already exists' ? 409 : 500;
+    return res.status(code).json({ message: error.message });
   }
 }
 
